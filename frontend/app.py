@@ -14,10 +14,11 @@ if PROJECT_DIRECTORY not in sys.path:
     sys.path.insert(0, PROJECT_DIRECTORY)
 
 from config import DEVICE, PROJECT_ROOT
-from src.scan_qr import DEFAULT_CHECKPOINT, build_scan_report
+from src.scan_qr import DEFAULT_CHECKPOINT, build_batch_csv, build_scan_reports
 
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_BATCH_IMAGES = 5
 ALLOWED_EXTENSIONS = {"bmp", "jpeg", "jpg", "png", "tif", "tiff", "webp"}
 AUDIT_REPORT_PATH = PROJECT_ROOT / "reports" / "dataset_audit.json"
 TEST_REPORT_PATH = PROJECT_ROOT / "reports" / "test_error_analysis.csv"
@@ -215,18 +216,20 @@ def calculate_test_summary(rows: list[dict[str, str]]) -> dict[str, Any] | None:
 
 
 def render_scan_tab() -> None:
-    st.subheader("Scan a QR image")
+    st.subheader("Scan QR images")
     st.write(
         "The CNN's image classification and the decoded QR/URL review are "
-        "separate signals. Neither is a safety verdict."
+        "separate signals. Scan up to five images per batch; neither is a "
+        "safety verdict."
     )
     upload_column, info_column = st.columns([1.35, 0.85], gap="large")
     with upload_column:
-        uploaded_file = st.file_uploader(
-            "Choose a QR image",
+        uploaded_files = st.file_uploader(
+            "Choose QR images",
             type=sorted(ALLOWED_EXTENSIONS),
-            help="Supported image files up to 10 MB.",
-            key="qr_upload",
+            accept_multiple_files=True,
+            help="Select up to five image files, each up to 10 MB.",
+            key="qr_batch_upload",
         )
 
     with info_column:
@@ -240,26 +243,53 @@ def render_scan_tab() -> None:
                 "analysis. QR destinations are never contacted."
             )
 
-    if uploaded_file is None:
-        st.info("Choose an image above to start the review.")
+    if not uploaded_files:
+        st.session_state.pop("batch_reports", None)
+        st.session_state.pop("batch_upload_key", None)
+        st.info("Choose one or more images above to start the review.")
         return
 
-    image_bytes = uploaded_file.getvalue()
-    upload_key = hashlib.sha256(image_bytes).hexdigest()
-    if st.session_state.get("scan_upload_key") != upload_key:
-        st.session_state.pop("scan_report", None)
-        st.session_state["scan_upload_key"] = upload_key
-
-    if len(image_bytes) > MAX_UPLOAD_BYTES:
-        st.error("This image is larger than the 10 MB upload limit.")
+    if len(uploaded_files) > MAX_BATCH_IMAGES:
+        st.error(f"Choose no more than {MAX_BATCH_IMAGES} images per batch.")
         return
+
+    uploaded_images = [
+        (uploaded_file, uploaded_file.getvalue())
+        for uploaded_file in uploaded_files
+    ]
+    oversized_files = [
+        uploaded_file.name
+        for uploaded_file, image_bytes in uploaded_images
+        if len(image_bytes) > MAX_UPLOAD_BYTES
+    ]
+    if oversized_files:
+        st.error(
+            "Each image must be 10 MB or smaller. Too large: "
+            + ", ".join(oversized_files)
+        )
+        return
+
+    upload_hasher = hashlib.sha256()
+    for uploaded_file, image_bytes in uploaded_images:
+        upload_hasher.update(uploaded_file.name.encode("utf-8"))
+        upload_hasher.update(image_bytes)
+    upload_key = upload_hasher.hexdigest()
+    if st.session_state.get("batch_upload_key") != upload_key:
+        st.session_state.pop("batch_reports", None)
+        st.session_state["batch_upload_key"] = upload_key
 
     with upload_column:
-        st.image(image_bytes, caption=uploaded_file.name, width="stretch")
+        st.caption(
+            "Selected images: "
+            + " · ".join(uploaded_file.name for uploaded_file, _ in uploaded_images)
+        )
         show_payload = st.checkbox(
-            "Include the full decoded payload in the report",
+            "Include decoded payloads in individual JSON reports",
             value=False,
-            help="The payload may contain private information. It is hidden by default.",
+            help=(
+                "Payloads may contain private information. They are hidden by "
+                "default and never included in the CSV."
+            ),
         )
 
     if not DEFAULT_CHECKPOINT.is_file():
@@ -267,93 +297,114 @@ def render_scan_tab() -> None:
         return
 
     if upload_column.button(
-        "Analyze QR image",
+        f"Analyze {len(uploaded_images)} image(s)",
         type="primary",
         width="stretch",
     ):
-        suffix = Path(uploaded_file.name).suffix.lower()
-        temp_path: Path | None = None
+        temp_paths: list[Path] = []
         try:
-            with tempfile.NamedTemporaryFile(
-                suffix=suffix,
-                prefix="qr-shield-",
-                delete=False,
-            ) as temporary_file:
-                temporary_file.write(image_bytes)
-                temp_path = Path(temporary_file.name)
+            for uploaded_file, image_bytes in uploaded_images:
+                suffix = Path(uploaded_file.name).suffix.lower()
+                with tempfile.NamedTemporaryFile(
+                    suffix=suffix,
+                    prefix="qr-shield-",
+                    delete=False,
+                ) as temporary_file:
+                    temporary_file.write(image_bytes)
+                    temp_paths.append(Path(temporary_file.name))
 
-            with st.spinner("Analyzing locally..."):
-                report = build_scan_report(
-                    temp_path,
+            with st.spinner("Analyzing images..."):
+                reports = build_scan_reports(
+                    temp_paths,
                     show_payload=show_payload,
                 )
-            report["image"] = uploaded_file.name
-            st.session_state["scan_report"] = report
+            for report, (uploaded_file, _) in zip(reports, uploaded_images):
+                report["image"] = uploaded_file.name
+            st.session_state["batch_reports"] = reports
         except (FileNotFoundError, OSError, ValueError, RuntimeError) as error:
             st.error(f"Analysis failed: {error}")
             return
         finally:
-            if temp_path is not None:
+            for temp_path in temp_paths:
                 temp_path.unlink(missing_ok=True)
 
-    report = st.session_state.get("scan_report")
-    if not report:
+    reports = st.session_state.get("batch_reports")
+    if not reports:
         return
 
-    visual = report["visual_classification"]
-    qr = report["qr"]
     st.divider()
-    visual_column, review_column = st.columns(2, gap="large")
-    with visual_column:
-        with st.container(border=True):
-            st.subheader("Visual classification")
-            prediction = visual["predicted_label"]
-            if prediction == "fake":
-                st.error(f"CNN prediction: **{prediction.upper()}**")
-            else:
-                st.info(f"CNN prediction: **{prediction.upper()}**")
-            st.caption(visual["score_note"])
-            st.bar_chart(visual["scores"], horizontal=True)
+    st.success(f"Finished reviewing {len(reports)} image(s).")
+    for index, report in enumerate(reports):
+        visual = report["visual_classification"]
+        qr = report["qr"]
+        with st.expander(f"{report['image']} · {visual['predicted_label'].upper()}"):
+            visual_column, review_column = st.columns(2, gap="large")
+            with visual_column:
+                with st.container(border=True):
+                    st.subheader("Visual classification")
+                    prediction = visual["predicted_label"]
+                    if prediction == "fake":
+                        st.error(f"CNN prediction: **{prediction.upper()}**")
+                    else:
+                        st.info(f"CNN prediction: **{prediction.upper()}**")
+                    st.caption(visual["score_note"])
+                    st.bar_chart(visual["scores"], horizontal=True)
 
-    with review_column:
-        with st.container(border=True):
-            st.subheader("QR and URL review")
-            if qr["decoded"]:
-                assessment = qr["url_assessment"]
-                st.write(f"Decoded QR code ({qr['payload_length']} payload characters).")
-                st.write(f"Assessment: **{assessment['status']}**")
-                if assessment["host"]:
-                    st.write(f"Host: `{assessment['host']}`")
-                if assessment["warnings"]:
-                    for warning in assessment["warnings"]:
-                        st.warning(warning)
-                else:
-                    st.info(
-                        "No configured heuristic warning found. This does not mean "
-                        "the destination is safe."
-                    )
-                if show_payload and "payload" in qr:
-                    st.code(qr["payload"], language=None)
-            else:
-                st.warning(f"QR decode failed: {qr['error']}")
-                st.caption("The CNN image classification is still shown above.")
+            with review_column:
+                with st.container(border=True):
+                    st.subheader("QR and URL review")
+                    if qr["decoded"]:
+                        assessment = qr["url_assessment"]
+                        st.write(
+                            f"Decoded QR code ({qr['payload_length']} payload characters)."
+                        )
+                        st.write(f"Assessment: **{assessment['status']}**")
+                        if assessment["host"]:
+                            st.write(f"Host: `{assessment['host']}`")
+                        if assessment["warnings"]:
+                            for warning in assessment["warnings"]:
+                                st.warning(warning)
+                        else:
+                            st.info(
+                                "No configured heuristic warning found. This does not "
+                                "mean the destination is safe."
+                            )
+                        if show_payload and "payload" in qr:
+                            st.code(qr["payload"], language=None)
+                    else:
+                        st.warning(f"QR decode failed: {qr['error']}")
+                        st.caption(
+                            "The CNN image classification is still shown above."
+                        )
 
-    with st.expander("Important limitations", expanded=True):
-        for limitation in report["limitations"]:
-            st.write(f"- {limitation}")
+            report_for_download = copy.deepcopy(report)
+            if not show_payload:
+                report_for_download["qr"].pop("payload", None)
+            st.download_button(
+                "Download JSON report",
+                data=json.dumps(
+                    report_for_download,
+                    indent=2,
+                    ensure_ascii=False,
+                ),
+                file_name=f"qr_shield_{Path(report['image']).stem}_report.json",
+                mime="application/json",
+                key=f"download_scan_{index}",
+                width="stretch",
+            )
 
-    report_json = json.dumps(report, indent=2, ensure_ascii=False)
-    if not show_payload:
-        report_for_download = copy.deepcopy(report)
-        report_for_download["qr"].pop("payload", None)
-        report_json = json.dumps(report_for_download, indent=2, ensure_ascii=False)
     st.download_button(
-        "Download JSON report",
-        data=report_json,
-        file_name="qr_shield_scan_report.json",
-        mime="application/json",
+        "Download batch CSV (payloads excluded)",
+        data=build_batch_csv(reports),
+        file_name="qr_shield_batch_summary.csv",
+        mime="text/csv",
+        key="download_batch_csv",
         width="stretch",
     )
+
+    with st.expander("Important limitations", expanded=True):
+        for limitation in reports[0]["limitations"]:
+            st.write(f"- {limitation}")
 
 
 def render_dashboard_tab(
@@ -500,14 +551,15 @@ with guide_tab:
     st.subheader("Run QR Shield AI")
     st.markdown(
         """
-1. Choose **Scan a QR** and upload an image (maximum 10 MB).
-2. Select **Analyze QR image**.
+1. Choose **Scan a QR** and upload up to five images (maximum 10 MB each).
+2. Select **Analyze** to review the batch.
 3. Review the CNN prediction separately from the QR/URL signals.
-4. Download the JSON report if needed.
+4. Download individual JSON reports or a batch CSV summary.
 
-The decoded payload is hidden unless you opt in. Never open an unfamiliar QR
-destination based only on this prototype's output. If hosted online, uploaded
-images are sent to the hosting server for analysis.
+The decoded payload is hidden unless you opt in for an individual JSON report
+and is never included in the CSV. Never open an unfamiliar QR destination
+based only on this prototype's output. If hosted online, uploaded images are
+sent to the hosting server for analysis.
         """
     )
     st.code(

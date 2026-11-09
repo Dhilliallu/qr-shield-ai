@@ -2,13 +2,19 @@ import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import cv2
 import torch
 
 from config import IMAGE_SIZE
 from src.model import QRClassifier
-from src.scan_qr import build_scan_report
+from src.scan_qr import (
+    build_batch_csv,
+    build_scan_report,
+    build_scan_reports,
+    load_classifier,
+)
 
 
 class BuildScanReportTests(unittest.TestCase):
@@ -75,6 +81,40 @@ class BuildScanReportTests(unittest.TestCase):
     def test_missing_image_fails_clearly(self) -> None:
         with self.assertRaises(FileNotFoundError):
             build_scan_report(self.directory / "missing.png", self.checkpoint_path)
+
+    def test_batch_scans_all_images_using_one_classifier_load(self) -> None:
+        second_image_path = self.directory / "second.png"
+        second_qr = cv2.QRCodeEncoder_create().encode("https://example.org/second")
+        self.assertTrue(cv2.imwrite(str(second_image_path), second_qr))
+
+        with patch("src.scan_qr.load_classifier", wraps=load_classifier) as load_model:
+            reports = build_scan_reports(
+                [self.image_path, second_image_path],
+                self.checkpoint_path,
+            )
+
+        self.assertEqual(load_model.call_count, 1)
+        self.assertEqual(len(reports), 2)
+        self.assertTrue(all(report["qr"]["decoded"] for report in reports))
+        self.assertTrue(all("payload" not in report["qr"] for report in reports))
+
+    def test_batch_scan_requires_at_least_one_image(self) -> None:
+        with self.assertRaisesRegex(ValueError, "At least one image"):
+            build_scan_reports([], self.checkpoint_path)
+
+    def test_batch_csv_includes_summary_but_not_payload(self) -> None:
+        report = build_scan_report(
+            self.image_path,
+            self.checkpoint_path,
+            show_payload=True,
+        )
+        report["image"] = self.image_path.name
+
+        csv_report = build_batch_csv([report])
+
+        self.assertIn("cnn_prediction", csv_report)
+        self.assertIn("example.com", csv_report)
+        self.assertNotIn("https://example.com/check", csv_report)
 
 
 if __name__ == "__main__":

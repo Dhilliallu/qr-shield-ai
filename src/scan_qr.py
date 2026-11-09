@@ -1,4 +1,6 @@
 import argparse
+import csv
+import io
 import json
 from pathlib import Path
 from typing import Any
@@ -121,6 +123,44 @@ def build_scan_report(
         raise FileNotFoundError(f"Image file not found: {image_path}")
 
     model, class_to_idx = load_classifier(checkpoint_path)
+    return _build_scan_report_with_classifier(
+        image_path,
+        model,
+        class_to_idx,
+        show_payload,
+    )
+
+
+def build_scan_reports(
+    image_paths: list[Path],
+    checkpoint_path: Path = DEFAULT_CHECKPOINT,
+    show_payload: bool = False,
+) -> list[dict[str, Any]]:
+    """Scan multiple images while loading the classifier only once."""
+    if not image_paths:
+        raise ValueError("At least one image is required for a batch scan.")
+    for image_path in image_paths:
+        if not image_path.is_file():
+            raise FileNotFoundError(f"Image file not found: {image_path}")
+
+    model, class_to_idx = load_classifier(checkpoint_path)
+    return [
+        _build_scan_report_with_classifier(
+            image_path,
+            model,
+            class_to_idx,
+            show_payload,
+        )
+        for image_path in image_paths
+    ]
+
+
+def _build_scan_report_with_classifier(
+    image_path: Path,
+    model: QRClassifier,
+    class_to_idx: dict[str, int],
+    show_payload: bool,
+) -> dict[str, Any]:
     visual_classification = classify_image(image_path, model, class_to_idx)
     try:
         payload = decode_qr_image(image_path)
@@ -156,6 +196,43 @@ def build_scan_report(
             "No heuristic warnings do not mean a URL is safe.",
         ],
     }
+
+
+def build_batch_csv(reports: list[dict[str, Any]]) -> str:
+    """Create a payload-free CSV summary of scan reports."""
+    fieldnames = (
+        "image",
+        "cnn_prediction",
+        "fake_score",
+        "real_score",
+        "qr_decoded",
+        "url_review",
+        "host",
+        "warning_count",
+        "warnings",
+    )
+    output = io.StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    for report in reports:
+        visual = report["visual_classification"]
+        qr = report["qr"]
+        assessment = qr.get("url_assessment") or {}
+        warnings = assessment.get("warnings", [])
+        writer.writerow(
+            {
+                "image": report.get("image", ""),
+                "cnn_prediction": visual["predicted_label"],
+                "fake_score": f"{visual['scores'].get('fake', 0.0):.6f}",
+                "real_score": f"{visual['scores'].get('real', 0.0):.6f}",
+                "qr_decoded": qr["decoded"],
+                "url_review": assessment.get("status", "Not decoded"),
+                "host": assessment.get("host") or "",
+                "warning_count": len(warnings),
+                "warnings": "; ".join(warnings),
+            }
+        )
+    return output.getvalue()
 
 
 def main() -> None:

@@ -331,14 +331,16 @@ python -m pip install -r requirements.txt
 python -m streamlit run .\frontend\app.py
 ```
 
-Open the local address printed by Streamlit in your browser. Upload a QR image
-(up to 10 MB) and select **Analyze QR image**. The **Model & dataset** tab
-shows saved test-set results and the dataset audit; **How to use** has quick
-start instructions. The scan page shows separate CNN and QR/URL results and
-offers a JSON download. The uploaded image is held in memory and a temporary
-copy is removed after analysis. The UI does not make requests to QR
-destinations. It is a local development interface, not a hardened public
-service.
+Open the local address printed by Streamlit in your browser. Upload up to five
+QR images per batch (each up to 10 MB) and select **Analyze**. The classifier
+is loaded once per batch. Each image gets separate CNN and QR/URL results, an
+individual JSON report, and the batch has a downloadable CSV summary. Decoded
+payloads are hidden by default; they can be opted into individual JSON reports
+but are never included in the CSV. The **Model & dataset** tab shows saved
+test-set results and the dataset audit; **How to use** has quick-start
+instructions. Uploaded images are held in memory and temporary copies are
+removed after analysis. The UI does not make requests to QR destinations. It
+is a local development interface, not a hardened public service.
 
 To run the current Windows environment without activating it first:
 
