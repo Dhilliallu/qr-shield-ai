@@ -2,11 +2,16 @@ import copy
 import csv
 import hashlib
 import json
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
 import streamlit as st
+
+PROJECT_DIRECTORY = str(Path(__file__).resolve().parents[1])
+if PROJECT_DIRECTORY not in sys.path:
+    sys.path.insert(0, PROJECT_DIRECTORY)
 
 from config import DEVICE, PROJECT_ROOT
 from src.scan_qr import DEFAULT_CHECKPOINT, build_scan_report
