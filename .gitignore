@@ -1,0 +1,35 @@
+# Python environments and cache files
+venv/
+.venv/
+.venv311/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Local environment variables and temporary files
+.env
+.env.*
+!.env.example
+*.tmp
+*.temp
+*.log
+
+# Dataset files (keep real data out of Git)
+dataset/**/*.jpg
+dataset/**/*.jpeg
+dataset/**/*.png
+dataset/**/*.bmp
+dataset/**/*.gif
+dataset/**/*.webp
+dataset/**/*.tif
+dataset/**/*.tiff
+dataset/**/*.zip
+dataset/**/*.7z
+
+# Model weights and checkpoints
+models/**/*.pt
+models/**/*.pth
+models/**/*.ckpt
+models/**/*.onnx
+models/**/*.h5
+!models/baseline_cnn.pth

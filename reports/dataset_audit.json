@@ -1,0 +1,138 @@
+{
+  "dataset_directory": "C:\\Users\\dhill\\OneDrive\\Desktop\\fake qr\\dataset",
+  "source_label_mapping": {
+    "benign_qr_images_500": "real",
+    "malicious_qr_images_500": "fake"
+  },
+  "source_folder_labels_independently_verified": false,
+  "network_requests_made": false,
+  "source_totals": {
+    "image_count": 1000,
+    "decoded_qr_count": 988,
+    "unreadable_image_count": 0,
+    "undecodable_qr_count": 12
+  },
+  "by_label": {
+    "real": {
+      "source_image_count": 500,
+      "decoded_qr_count": 496,
+      "undecodable_qr_count": 4,
+      "unreadable_image_count": 0,
+      "web_like_payload_count": 496,
+      "source_dimensions": [
+        {
+          "width": 290,
+          "height": 290
+        },
+        {
+          "width": 330,
+          "height": 330
+        },
+        {
+          "width": 370,
+          "height": 370
+        },
+        {
+          "width": 450,
+          "height": 450
+        }
+      ]
+    },
+    "fake": {
+      "source_image_count": 500,
+      "decoded_qr_count": 492,
+      "undecodable_qr_count": 8,
+      "unreadable_image_count": 0,
+      "web_like_payload_count": 492,
+      "source_dimensions": [
+        {
+          "width": 290,
+          "height": 290
+        },
+        {
+          "width": 330,
+          "height": 330
+        },
+        {
+          "width": 370,
+          "height": 370
+        },
+        {
+          "width": 410,
+          "height": 410
+        },
+        {
+          "width": 450,
+          "height": 450
+        },
+        {
+          "width": 490,
+          "height": 490
+        },
+        {
+          "width": 530,
+          "height": 530
+        },
+        {
+          "width": 570,
+          "height": 570
+        },
+        {
+          "width": 610,
+          "height": 610
+        },
+        {
+          "width": 650,
+          "height": 650
+        },
+        {
+          "width": 1010,
+          "height": 1010
+        }
+      ]
+    }
+  },
+  "duplicate_checks": {
+    "exact_file_duplicate_groups": [],
+    "pixel_identical_duplicate_groups": [],
+    "cross_label_identical_payloads": [],
+    "repeated_payloads_across_prepared_splits": []
+  },
+  "prepared_split_counts": {
+    "train": {
+      "real": 350,
+      "fake": 350
+    },
+    "val": {
+      "real": 75,
+      "fake": 75
+    },
+    "test": {
+      "real": 75,
+      "fake": 75
+    }
+  },
+  "prepared_images_with_wrong_size_or_read_error": [],
+  "unreadable_source_images": [],
+  "undecodable_qr_images": [
+    "benign_qr_images_500/qr_388_benign_images.png",
+    "benign_qr_images_500/qr_456_benign_images.png",
+    "benign_qr_images_500/qr_467_benign_images.png",
+    "benign_qr_images_500/qr_94_benign_images.png",
+    "malicious_qr_images_500/qr_127_malicious_images.png",
+    "malicious_qr_images_500/qr_177_malicious_images.png",
+    "malicious_qr_images_500/qr_270_malicious_images.png",
+    "malicious_qr_images_500/qr_290_malicious_images.png",
+    "malicious_qr_images_500/qr_307_malicious_images.png",
+    "malicious_qr_images_500/qr_338_malicious_images.png",
+    "malicious_qr_images_500/qr_442_malicious_images.png",
+    "malicious_qr_images_500/qr_457_malicious_images.png"
+  ],
+  "limitations": [
+    "Folder names were treated as labels; payload decoding cannot prove that a destination is benign or malicious.",
+    "No QR destination was opened, resolved, or contacted.",
+    "Exact file and decoded-pixel hashes do not detect resized, recompressed, or otherwise modified duplicates.",
+    "A repeated decoded payload does not by itself establish that the source labels are wrong."
+  ],
+  "source_counts_match_expected": true
+}
