@@ -241,7 +241,7 @@ def render_scan_tab() -> None:
             )
 
     if uploaded_file is None:
-        st.info("Choose an image above to begin your local scan.")
+        st.info("Choose an image above to start the review.")
         return
 
     image_bytes = uploaded_file.getvalue()
@@ -455,7 +455,7 @@ st.markdown(
     """
 <section class="qr-hero">
   <div class="qr-hero-copy">
-    <p class="qr-hero-kicker">Private by design · Local analysis</p>
+    <p class="qr-hero-kicker">Image review · No destination lookups</p>
     <h1>Check before<br>you scan.</h1>
     <p>Review a QR image, its decoded destination, and the model's visual signal
        in one place. Images are processed by this app; QR destinations are never contacted.</p>
@@ -481,7 +481,9 @@ with st.sidebar:
         st.error("Model checkpoint not found")
     st.write("Device selected by PyTorch:")
     st.code(str(DEVICE))
-    st.write("QR and URL checks run locally. No DNS, browsing, or reputation lookup.")
+    st.write(
+        "URL review is heuristic only; no DNS, browsing, or reputation lookup."
+    )
 
 audit_report, test_report_rows = load_project_reports()
 scan_tab, dashboard_tab, guide_tab = st.tabs(
